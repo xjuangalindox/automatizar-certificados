@@ -40,3 +40,40 @@ git commit -m "nueva version"
 ```
 git push origin main --force
 ```
+
+---
+
+# CONFIGURAR GIT POR PRIMERA VEZ
+
+## 1. Configurar nombre de usuario
+```bash
+git config --global user.name "Juan Galindo"
+```
+
+## 2. Configurar correo
+```bash
+git config --global user.email "xjuangalindox@gmail.com"
+```
+
+## 3. Verificar configuración
+```bash
+git config --list
+```
+
+## 4. Inicializar repositorio en carpeta del proyecto
+```bash
+git init
+```
+
+## 5. Agregar remoto (ejemplo con GitHub)
+```bash
+git remote add origin https://github.com/xjuangalindox/automatizar-certificados.git
+git remote -v
+```
+
+## 6. Primer commit y push
+```bash
+git add .
+git commit -m "primer commit"
+git push -u origin main
+```
