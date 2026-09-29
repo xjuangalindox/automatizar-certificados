@@ -1,6 +1,6 @@
 # QUE HACER SI LAS CREDENCIALES ESTÁN RASTREADAS
 
-## 1. Crear `.gitignore`
+## 1. Crear `.gitignore` con el nombre de las credenciales
 ```
 gitignore
 venv/
