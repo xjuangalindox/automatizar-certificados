@@ -77,3 +77,6 @@ git add .
 git commit -m "primer commit"
 git push -u origin main
 ```
+
+## 7. Autorizar acceso
+Autenticarse y autorizar acceso

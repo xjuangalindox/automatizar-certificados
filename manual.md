@@ -93,6 +93,9 @@ venv/Scripts/activate
 # instalar librerias (bash)
 ./venv/Scripts/python.exe -m pip install google-auth-httplib2 google-auth-oauthlib google-api-python-client
 
+# En caso de error por falta de google library (ModuleNotFoundError: No module named 'google')
+python -m pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client
+
 # ejecutar script (bash)
 python app.py
 
