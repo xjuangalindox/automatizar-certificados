@@ -319,7 +319,8 @@ def on_click_row(event, diccionario):
         print("Visualizando archivo:", archivo)
 # __________________________________________________________________________________
 
-def mostrar_archivos(entry_control, tabla_publica, tabla_privada):
+def listar_archivos(entry_control, tabla_publica, tabla_privada):
+    global control
     global archivos_publicos_dict, archivos_privados_dict
 
     archivos_publicos_dict = {}
@@ -340,7 +341,7 @@ def mostrar_archivos(entry_control, tabla_publica, tabla_privada):
 
     if not public_id or not private_id:
         # No existen -> mostrar mensaje
-        messagebox.showerror("Error", "Las carpetas digitales no fueron encontradas. Primero debe generarlas antes de enviar la notificación.")
+        messagebox.showerror("Error", "Las carpetas digitales no fueron encontradas.")
         return
 
     # Limpiar tablas antes de llenarlas
@@ -351,13 +352,20 @@ def mostrar_archivos(entry_control, tabla_publica, tabla_privada):
     # Listar archivos de carpeta pública
     archivos_publicos = drive_service.files().list(
         q=f"'{public_id}' in parents and trashed=false",
-        fields="files(id, name, mimeType)"
+        fields="files(id, name, mimeType, size)"
+    ).execute().get("files", [])
+
+    # Listar archivos de carpeta privada
+    archivos_privados = drive_service.files().list(
+        q=f"'{private_id}' in parents and trashed=false",
+        fields="files(id, name, mimeType, size)"
     ).execute().get("files", [])
 
     # archivos_publicos_dict = {}
     for archivo in archivos_publicos:
         file_id = archivo["id"]
         nombre = archivo["name"]
+        tamano = int(archivo.get("size", 0))
         extension = nombre.split(".")[-1] if "." in nombre else ""
         estatus = "Disponible"  # aquí puedes poner lógica real
         acciones = ""           # columna vacía por ahora
@@ -365,15 +373,10 @@ def mostrar_archivos(entry_control, tabla_publica, tabla_privada):
         
         archivos_publicos_dict[nombre] = file_id
 
-    # Listar archivos de carpeta privada
-    archivos_privados = drive_service.files().list(
-        q=f"'{private_id}' in parents and trashed=false",
-        fields="files(id, name, mimeType)"
-    ).execute().get("files", [])
-
     for archivo in archivos_privados:
         file_id = archivo["id"]
         nombre = archivo["name"]
+        tamano = int(archivo.get("size", 0))
         extension = nombre.split(".")[-1] if "." in nombre else ""
         estatus = "Disponible"
         acciones = ""
@@ -415,7 +418,6 @@ root.geometry("350x250")
 # =====================================
 
 def abrir_carpeta_digital():
-
     ventana = tk.Toplevel(root)
     ventana.title("Carpeta Digital")
     ventana.geometry("350x300")
@@ -604,85 +606,126 @@ def abrir_especificaciones(nombre_hoja, spreadsheet_id):
 # =====================================
 
 def abrir_observaciones():
-
     ventana = tk.Toplevel(root)
     ventana.title("Observaciones")
     ventana.geometry("1000x500")
 
-    tk.Label(ventana, text="Número de control:").pack(pady=5)
+    # ==========================================
+    # FRAME: Número de control
+    # ==========================================
 
-    entry_control = tk.Entry(ventana, width=30)
-    entry_control.pack(pady=5)
+    # Frame
+    frame_control = tk.Frame(ventana)
+    frame_control.pack(pady=5)
 
+    # Label
+    tk.Label(frame_control, text="Número de control:").grid(row=0, column=0, padx=5, pady=5)
+
+    # Entry
+    entry_control = tk.Entry(frame_control, width=15)
+    entry_control.grid(row=0, column=1, padx=5, pady=5)
+
+    # ==========================================
+    # FRAME: Tablas pública y privada
+    # ==========================================
+
+    # Frame
     frame_tablas = tk.Frame(ventana)
     frame_tablas.pack(fill="both", expand=True, padx=10, pady=10)
 
-    columnas = ("archivo", "acciones")
-    columnas = ("archivo", "extension", "estatus", "acciones")
+    #Columns
+    columnas = ("archivo", "size")
 
-    # Carpeta pública
+    # FRAME: Tabla pública
     frame_publica = tk.LabelFrame(frame_tablas, text="Carpeta Pública")
     frame_publica.pack(side="left", fill="both", expand=True, padx=5)
 
+    # Tabla
     tabla_publica = ttk.Treeview(
         frame_publica,
         columns=columnas,
         show="headings"
     )
 
-    # Enlazar evento de clic
-    tabla_publica.bind("<Double-1>", lambda event: on_click_row(event, archivos_publicos_dict))
-
-    # Carpeta privada
+    # FRAME: Tabla privada
     frame_privada = tk.LabelFrame(frame_tablas, text="Carpeta Privada")
     frame_privada.pack(side="left", fill="both", expand=True, padx=5)
 
+    # Tabla
     tabla_privada = ttk.Treeview(
         frame_privada,
         columns=columnas,
         show="headings"
     )
 
-    # Enlazar evento de clic
-    tabla_privada.bind("<Double-1>", lambda event: on_click_row(event, archivos_privados_dict))
+    # ==========================================
+    # CONSTRUCCIÓN: Tablas pública y privada
+    # ==========================================
 
     for tabla in (tabla_publica, tabla_privada):
 
         tabla.heading("archivo", text="Archivo")
-        tabla.heading("extension", text="Extensión")
-        tabla.heading("estatus", text="Estatus")
-        tabla.heading("acciones", text="Acciones")
+        tabla.heading("size", text="Tamaño")
 
-        tabla.column("archivo", width=150)
-        tabla.column("extension", width=80)
-        tabla.column("estatus", width=100)
-        tabla.column("acciones", width=120)
+        tabla.column("archivo", width=250)
+        tabla.column("size", width=50)
+
+        # tabla.heading("archivo", text="Archivo")
+        # tabla.heading("extension", text="Extensión")
+        # tabla.heading("estatus", text="Estatus")
+        # tabla.heading("acciones", text="Acciones")
+
+        # tabla.column("archivo", width=150)
+        # tabla.column("extension", width=80)
+        # tabla.column("estatus", width=100)
+        # tabla.column("acciones", width=120)
 
         tabla.pack(fill="both", expand=True, padx=5, pady=5)
 
-    # Botón para mostrar archivos
-    tk.Button(
-        ventana,
-        text="Mostrar archivos",
-        command=lambda: mostrar_archivos(entry_control, tabla_publica, tabla_privada)
-    ).pack(pady=15)
+    # ==========================================
+    # FRAME: Buttons Acciones
+    # ==========================================
 
-    # Botón para copiar archivo seleccionado de pública a privada
+    # Frame
+    frame_acciones = tk.Frame(ventana)
+    frame_acciones.pack(pady=5)
+
+    # Button - copiar archivo a privada
     tk.Button(
-        ventana,
+        frame_acciones,
         text="Copiar a privada",
         command=lambda: copiar_a_privada(entry_control, tabla_publica, tabla_privada)
-    ).pack(pady=10)
+    ).grid(row=0, column=0, padx=5, pady=5)
 
-    # Botón para eliminar archivos de privada 
+    # Button - eliminar archivos de privada 
     tk.Button(
-        ventana,
+        frame_acciones,
         text="Eliminar de privada",
         command=lambda: eliminar_de_privada(entry_control, tabla_privada, tabla_publica)
-    ).pack(pady=10)
+    ).grid(row=0, column=1, padx=5, pady=5)
+
+    # ==========================================
+    # EVENTS
+    # ==========================================
+
+    # Entry control
+    entry_control.bind(
+        "<Return>",
+        lambda event: listar_archivos(
+            entry_control,
+            tabla_publica,
+            tabla_privada
+        )
+    )
+
+    # Tabla pública
+    tabla_publica.bind("<Double-1>", lambda event: on_click_row(event, archivos_publicos_dict))
+
+    # Tabla privada
+    tabla_privada.bind("<Double-1>", lambda event: on_click_row(event, archivos_privados_dict))
 
     # Crear botones de hojas de Especificaciones
-    botones_documentos(ventana)
+    # botones_documentos(ventana)
 
 
 # =====================================
