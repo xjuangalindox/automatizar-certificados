@@ -12,7 +12,20 @@ https://console.cloud.google.com/
 # Paso 2: Habilitar Google Drive API
 Selecionar proyecto
 Ingresar a la seccion "APIs y servicios/Biblioteca"
-Buscar Google Drive API en el buscador y habilitarla
+Buscar y habilitar:
+- Google Drive API
+- Gmail API
+- Google Sheets API
+
+# Alcance: acceso completo a Drive
+SCOPES = [
+    'https://www.googleapis.com/auth/drive', 
+    'https://www.googleapis.com/auth/gmail.send',
+    'https://www.googleapis.com/auth/spreadsheets'
+]
+
+Eliminar token.json y ejecutar app.py
+
 
 # NOTA: Pantalla de consentimiento
 "Configurar pantalla de consentimiento" y "comenzar"
