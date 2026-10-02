@@ -80,3 +80,10 @@ git push -u origin main
 
 ## 7. Autorizar acceso
 Autenticarse y autorizar acceso
+
+# _____________________________________________________________________________________________
+
+## Traer cambios sin commit adicion
+```bash
+git pull origin main --rebase
+```

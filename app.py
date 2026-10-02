@@ -151,10 +151,6 @@ def generar_carpetas(entry_control, entry_correo):
     # Notificar
     notificar_carpetas()
 
-    # Imprimir URLs en consola
-    # print("Carpeta pública:", f"https://drive.google.com/drive/folders/{public_id}")
-    # print("Carpeta privada:", f"https://drive.google.com/drive/folders/{private_id}")
-
 # __________________________________________________________________________________
 
 def notificar_carpetas(entry_control, entry_correo):
@@ -215,12 +211,12 @@ def notificar_carpetas(entry_control, entry_correo):
 # __________________________________________________________________________________
 
 def eliminar_de_privada(entry_control, tabla_privada, tabla_publica):
+    
+    # Validar numero de control
     numero_control = entry_control.get().strip()
     if not numero_control:
         messagebox.showerror("Error", "Debes ingresar el número de control")
         return
-
-    drive_service = get_drive_service()
 
     # Obtener archivo seleccionado en tabla privada
     item_id = tabla_privada.focus()
@@ -229,9 +225,11 @@ def eliminar_de_privada(entry_control, tabla_privada, tabla_publica):
         return
 
     valores = tabla_privada.item(item_id, "values")
-    archivo, extension, estatus, acciones = valores
-    file_id = archivos_privados_dict.get(archivo)
+    archivo, size = valores
+    # archivo, extension, estatus, acciones = valores
 
+    # Busca el ID de Drive usando el nombre en el diccionario
+    file_id = archivos_privados_dict.get(archivo)
     if not file_id:
         messagebox.showerror("Error", "No se encontró el archivo en el diccionario")
         return
@@ -241,23 +239,28 @@ def eliminar_de_privada(entry_control, tabla_privada, tabla_publica):
     if not respuesta:
         return
 
+    # Coneccion con Drive
+    drive_service = get_drive_service()
+
     # 🔥 Eliminar archivo
     drive_service.files().delete(fileId=file_id).execute()
-    messagebox.showinfo("Éxito", f"Archivo '{archivo}' eliminado de la carpeta privada.")
+    # messagebox.showinfo("Éxito", f"Archivo '{archivo}' eliminado de la carpeta privada.")
 
     # Refrescar tablas
-    mostrar_archivos(entry_control, tabla_publica, tabla_privada)
+    listar_archivos(entry_control, tabla_publica, tabla_privada)
 
 # __________________________________________________________________________________
 
 def copiar_a_privada(entry_control, tabla_publica, tabla_privada):
+
+    # Validar numero de control
     numero_control = entry_control.get().strip()
     if not numero_control:
         messagebox.showerror("Error", "Debes ingresar el número de control")
         return
 
-    drive_service = get_drive_service()
-    private_id = find_folder(drive_service, f"{numero_control}_private")
+    # drive_service = get_drive_service()
+    # private_id = find_folder(drive_service, f"{numero_control}_private")
 
     # Obtener archivo seleccionado en tabla pública
     item_id = tabla_publica.focus()
@@ -266,11 +269,23 @@ def copiar_a_privada(entry_control, tabla_publica, tabla_privada):
         return
 
     valores = tabla_publica.item(item_id, "values")
-    archivo, extension, estatus, acciones = valores
-    file_id = archivos_publicos_dict.get(archivo)
+    archivo, size = valores
 
+    # Busca el ID de Drive usando el nombre en el diccionario
+    file_id = archivos_publicos_dict.get(archivo)
     if not file_id:
         messagebox.showerror("Error", "No se encontró el archivo en el diccionario")
+        return
+
+    # Coneccion con Drive
+    drive_service = get_drive_service()
+
+    # Obtener id de la carpeta privada
+    private_id = find_folder(drive_service, f"{numero_control}_private")
+
+    # Validar si existe la carpeta privada
+    if not private_id:
+        messagebox.showerror("Error", "No se encontró la carpeta privada")
         return
 
     # 🔎 Validar si ya existe en privada
@@ -285,38 +300,49 @@ def copiar_a_privada(entry_control, tabla_publica, tabla_privada):
         return
 
     # ➕ Copiar archivo a privada
-    copia = drive_service.files().copy(
+    drive_service.files().copy(
         fileId=file_id,
         body={"parents": [private_id]}
     ).execute()
 
     # Mensaje Exitó
-    messagebox.showinfo("Éxito", f"Archivo '{archivo}' copiado a privada como '{copia['name']}'")
+    # messagebox.showinfo("Éxito", f"Archivo '{archivo}' copiado a privada como '{copia['name']}'")
 
     # Opcional: refrescar tabla privada para mostrar el nuevo archivo
-    mostrar_archivos(entry_control, tabla_publica, tabla_privada)
+    listar_archivos(entry_control, tabla_publica, tabla_privada)
 
 # __________________________________________________________________________________
 
-def on_click_row(event, diccionario):
-    tabla = event.widget   # el widget que disparó el evento
+def on_double_click_row(event, diccionario):
+    tabla = event.widget # Tabla que disparó el evento
 
-    item_id = tabla.focus()
+    item_id = tabla.focus() # ID interno de la fila seleccionada (ej. "I003")
     if not item_id:
         return
 
-    valores = tabla.item(item_id, "values")
-    archivo, extension, estatus, acciones = valores
+    valores = tabla.item(item_id, "values") # Obtiene valores de la fila (ej. ("documento.pdf", "1.2 MB"))
+    archivo, size = valores # Nombre y tamaño del archivo
 
-    # Aquí deberías tener el ID del archivo de Drive
-    # Supongamos que lo guardaste en un diccionario al llenar la tabla:
+    # Busca el ID de Drive usando el nombre en el diccionario
     file_id = diccionario.get(archivo)
 
     if file_id:
-        # URL de visualización en Google Drive
+        # Construye URL de visualización en Drive
         url = f"https://drive.google.com/file/d/{file_id}/view"
-        webbrowser.open_new_tab(url)  # abre en pestaña nueva
+        webbrowser.open_new_tab(url) # Abre archivo en pestaña nueva
         print("Visualizando archivo:", archivo)
+# __________________________________________________________________________________
+
+def format_size(size_bytes):
+    if size_bytes == 0:
+        return "0 B"
+    elif size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024**2:
+        return f"{size_bytes/1024:.2f} KB"
+    else:
+        return f"{size_bytes/(1024**2):.2f} MB"
+
 # __________________________________________________________________________________
 
 def listar_archivos(entry_control, tabla_publica, tabla_privada):
@@ -325,6 +351,11 @@ def listar_archivos(entry_control, tabla_publica, tabla_privada):
 
     archivos_publicos_dict = {}
     archivos_privados_dict = {}
+
+    # Limpiar tablas antes de llenarlas
+    for tabla in (tabla_publica, tabla_privada):
+        for row in tabla.get_children():
+            tabla.delete(row)
 
     numero_control = entry_control.get().strip()
 
@@ -344,11 +375,6 @@ def listar_archivos(entry_control, tabla_publica, tabla_privada):
         messagebox.showerror("Error", "Las carpetas digitales no fueron encontradas.")
         return
 
-    # Limpiar tablas antes de llenarlas
-    for tabla in (tabla_publica, tabla_privada):
-        for row in tabla.get_children():
-            tabla.delete(row)
-    
     # Listar archivos de carpeta pública
     archivos_publicos = drive_service.files().list(
         q=f"'{public_id}' in parents and trashed=false",
@@ -361,57 +387,27 @@ def listar_archivos(entry_control, tabla_publica, tabla_privada):
         fields="files(id, name, mimeType, size)"
     ).execute().get("files", [])
 
-    # archivos_publicos_dict = {}
     for archivo in archivos_publicos:
         file_id = archivo["id"]
         nombre = archivo["name"]
-        tamano = int(archivo.get("size", 0))
-        extension = nombre.split(".")[-1] if "." in nombre else ""
-        estatus = "Disponible"  # aquí puedes poner lógica real
-        acciones = ""           # columna vacía por ahora
-        tabla_publica.insert("", "end", values=(nombre, extension, estatus, acciones))
-        
-        archivos_publicos_dict[nombre] = file_id
+        size = format_size(int(archivo.get("size", 0)))
+
+        tabla_publica.insert("", "end", values=(nombre, size))
+        archivos_publicos_dict[nombre] = file_id # nombre_archivo: id_archivo
 
     for archivo in archivos_privados:
         file_id = archivo["id"]
         nombre = archivo["name"]
-        tamano = int(archivo.get("size", 0))
-        extension = nombre.split(".")[-1] if "." in nombre else ""
-        estatus = "Disponible"
-        acciones = ""
-        tabla_privada.insert("", "end", values=(nombre, extension, estatus, acciones))
+        size = format_size(int(archivo.get("size", 0)))
 
-        archivos_privados_dict[nombre] = file_id
-
-# __________________________________________________________________________________
-
-# Interfaz gráfica
-# root = tk.Tk()
-# root.title("Generar Carpeta Digital")
-
-# tk.Label(root, text="Número de control:").pack(pady=5)
-# entry_control = tk.Entry(root, width=30)
-# entry_control.pack(pady=5)
-
-# tk.Label(root, text="Correo personal (opcional):").pack(pady=5)
-# entry_correo = tk.Entry(root, width=30)
-# entry_correo.pack(pady=5)
-
-# # Botón para crear carpetas
-# tk.Button(root, text="Generar Carpeta Digital", command=generar_carpetas).pack(pady=20)
-
-# # Botón para notificar de carpetas
-# tk.Button(root, text="Notificar Carpeta Digital", command=notificar_carpetas).pack(pady=20)
-
-# root.mainloop()
+        tabla_privada.insert("", "end", values=(nombre, size))
+        archivos_privados_dict[nombre] = file_id # nombre_archivo: id_archivo
 
 # __________________________________________________________________________________
 
 root = tk.Tk()
 root.title("Gestión de Expedientes")
 root.geometry("350x250")
-
 
 # =====================================
 # VENTANA CARPETA DIGITAL
@@ -420,29 +416,45 @@ root.geometry("350x250")
 def abrir_carpeta_digital():
     ventana = tk.Toplevel(root)
     ventana.title("Carpeta Digital")
-    ventana.geometry("350x300")
+    ventana.geometry("350x200")
 
-    tk.Label(ventana, text="Número de control:").pack(pady=5)
-    entry_control = tk.Entry(ventana, width=30)
-    entry_control.pack(pady=5)
+    # ==========================================
+    # FRAME: Control and Email
+    # ==========================================
 
-    tk.Label(ventana, text="Correo personal (opcional):").pack(pady=5)
-    entry_correo = tk.Entry(ventana, width=30)
-    entry_correo.pack(pady=5)
+    # frame
+    frame_control = tk.Frame(ventana)
+    frame_control.pack(pady=5)
 
+    tk.Label(frame_control, text="Número de control:").grid(row=0, column=0, padx=5, pady=5)
+    entry_control = tk.Entry(frame_control, width=30)
+    entry_control.grid(row=0, column=1, padx=5, pady=5)
+
+    tk.Label(frame_control, text="Correo personal (opcional):").grid(row=1, column=0, padx=5, pady=5)
+    entry_correo = tk.Entry(frame_control, width=30)
+    entry_correo.grid(row=1, column=1, padx=5, pady=5)
+
+    # ==========================================
+    # FRAME: Buttons Acciones
+    # ==========================================
+
+    # frame
+    frame_buttons = tk.Frame(ventana)
+    frame_buttons.pack(pady=5)
+
+    # Generar Carpeta Digital
     tk.Button(
-        ventana,
+        frame_buttons,
         text="Generar Carpeta Digital",
         command=lambda: generar_carpetas(entry_control, entry_correo)
-        # command=generar_carpetas
-    ).pack(pady=15)
+    ).grid(row=0, column=0, padx=5, pady=5)
 
+    # Notificar Carpeta Digital
     tk.Button(
-        ventana,
+        frame_buttons,
         text="Notificar Carpeta Digital",
         command=lambda: notificar_carpetas(entry_control, entry_correo)
-        # command=notificar_carpetas
-    ).pack(pady=5)
+    ).grid(row=0, column=1, padx=5, pady=5)
 
 # __________________________________________________________________________________
 
@@ -586,18 +598,6 @@ def abrir_especificaciones(nombre_hoja, spreadsheet_id):
 
     tabla.bind("<Double-1>", toggle_estado)
 
-
-    # Titulo documento (nombre_hoja)
-
-    # Crear una tabla con el id y la condicion de la hoja (columnas)
-
-    # Cada row o fila o condicion puede ser marcado o desmarcado (alomejor un combobox o no recuerdo como se llamaba)
-
-    # En un diccionario meter el nombre del documento y el id de la condicion
-
-    # Si el admin marca una condicion guardar el id pero si desmarca la condicion, eliminar el id
-    
-
     # Aquí defines qué hacer al abrir cada hoja
     print(f"Abrir hoja: {nombre_hoja}")
 
@@ -719,10 +719,10 @@ def abrir_observaciones():
     )
 
     # Tabla pública
-    tabla_publica.bind("<Double-1>", lambda event: on_click_row(event, archivos_publicos_dict))
+    tabla_publica.bind("<Double-1>", lambda event: on_double_click_row(event, archivos_publicos_dict))
 
     # Tabla privada
-    tabla_privada.bind("<Double-1>", lambda event: on_click_row(event, archivos_privados_dict))
+    tabla_privada.bind("<Double-1>", lambda event: on_double_click_row(event, archivos_privados_dict))
 
     # Crear botones de hojas de Especificaciones
     # botones_documentos(ventana)
