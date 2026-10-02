@@ -474,7 +474,7 @@ def botones_documentos(ventana):
     results = drive_service.files().list(q=query, fields="files(id, name)").execute()
     files = results.get("files", [])
     if not files:
-        tk.Label(ventana, text="No se encontró el archivo Especificaciones").pack(pady=5)
+        tk.Label(ventana, text="No se encontró la hoja de calculo Especificaciones").pack(pady=5)
         return
 
     # Obtener ID del archivo Especificaciones
@@ -483,120 +483,146 @@ def botones_documentos(ventana):
     # Obtener nombres de hojas
     hojas = get_sheet_names(spreadsheet_id)
 
-    # Crear botones dinámicos
-    for hoja in hojas:
+    # Frame: contenedor especificaciones
+    frame_documentos = tk.LabelFrame(ventana, text="Especificaciones")
+    frame_documentos.pack(fill="x", expand=True, padx=5)
+
+    # Frame: contenedor botones
+    frame_botones = tk.Frame(frame_documentos)
+    frame_botones.pack(anchor="center", pady=5)
+
+    # Botones documentos
+    for columna, hoja in enumerate(hojas):
         tk.Button(
-            ventana,
+            frame_botones,
             text=hoja,
             command=lambda h=hoja: abrir_especificaciones(h, spreadsheet_id)
-        ).pack(pady=5)
+        ).grid(row=0, column=columna, padx=5, pady=5)
 
 # __________________________________________________________________________________
 
 def leer_condiciones(nombre_hoja, spreadsheet_id):
-    service = get_sheets_service()  # usa tus credenciales
+
+    # Conectar con Sheets
+    service = get_sheets_service()
+
+    # Obtener rows del documento
     result = service.spreadsheets().values().get(
         spreadsheetId=spreadsheet_id,
         range=nombre_hoja
     ).execute()
 
+    # Validar filas (ID, Condicion, Especificacion, Activo)
     values = result.get("values", [])
     if not values:
         return []
 
-    # Buscar columnas ID y Condicion
+    # Encabezados
     encabezados = values[0]
+
+    # Índices de las columnas que nos interesan
     try:
-        idx_id = encabezados.index("ID")
-        idx_cond = encabezados.index("Condicion")
+        indice_id = encabezados.index("ID")
+        indice_condicion = encabezados.index("Condicion")
     except ValueError:
         return []
 
+    # filas finales (id, condicion)
     filas = []
+
+    # Recorrer filas de datos
     for row in values[1:]:
-        if len(row) > max(idx_id, idx_cond):
-            filas.append({"id": row[idx_id], "condicion": row[idx_cond]})
+        filas.append({
+            "id": row[indice_id],
+            "condicion": row[indice_condicion]
+        })
+
     return filas
+
+    # ______________
+
+    # Buscar columnas ID y Condicion
+    # encabezados = values[0]
+    # try:
+    #     idx_id = encabezados.index("ID")
+    #     idx_cond = encabezados.index("Condicion")
+    # except ValueError:
+    #     return []
+
+    # filas = []
+    # for row in values[1:]:
+    #     if len(row) > max(idx_id, idx_cond):
+    #         filas.append({"id": row[idx_id], "condicion": row[idx_cond]})
+    # return filas
 
 # Diccionario global para guardar condiciones seleccionadas
 condiciones_dict = {}
 
 def abrir_especificaciones(nombre_hoja, spreadsheet_id):
     ventana = tk.Toplevel(root)
-    ventana.title("Observaciones")
+    ventana.title("Especificaciones")
     ventana.geometry("500x300")
 
     # Título
     tk.Label(ventana, text=f"{nombre_hoja}", font=("Arial", 12, "bold")).pack(pady=10)
 
-    # Frame para tabla
-    frame_tabla = tk.Frame(ventana)
-    frame_tabla.pack(fill="both", expand=True, padx=10, pady=10)
+    # frame: contenedor tabla
+    frame_tabla = tk.LabelFrame(ventana, text="18680128")
+    frame_tabla.pack(fill="both", expand=True, padx=5)
 
-    columnas = ("id", "condicion", "estado")
+    # columnas
+    columnas = ("id", "condicion", "notificar")
 
-    # Crear tabla
-    tabla = ttk.Treeview(frame_tabla, columns=columnas, show="headings")
+    # tabla
+    tabla = ttk.Treeview(
+        frame_tabla, 
+        columns=columnas, 
+        show="headings")
     tabla.pack(fill="both", expand=True)
-
-    # Configurar encabezados
-    # for col in columnas:
-    #     tabla.heading(col, text=col.capitalize())
-
-    # Fuente usada en la tabla
-    # font = tkFont.nametofont("TkDefaultFont")
-
-    # Insertar filas y calcular ancho máximo
-    # max_widths = {col: len(col) for col in columnas}  # empieza con el ancho del encabezado
 
     tabla.heading("id", text="ID")
     tabla.heading("condicion", text="Condición")
-    tabla.heading("estado", text="Estado")
+    tabla.heading("notificar", text="Notificar")
 
     tabla.column("id", width=100)
     tabla.column("condicion", width=250)
-    tabla.column("estado", width=150)
+    tabla.column("notificar", width=150)
 
-    # Leer datos de la hoja Especificaciones
+    # Leer datos del documento (id, condicion)
     datos = leer_condiciones(nombre_hoja, spreadsheet_id)
 
-    # Insertar filas validando contra condiciones_dict
+    # Insertar filas (validando contra condiciones_dict)
     for d in datos:
-        estado_inicial = "TRUE" if nombre_hoja in condiciones_dict and d["id"] in condiciones_dict[nombre_hoja] else "FALSE"
-        tabla.insert("", "end", values=(d["id"], d["condicion"], estado_inicial))
+        tabla.insert("", "end", values=(d["id"], d["condicion"], "FALSE"))
 
-        # Calcular ancho de cada columna según texto
-        # max_widths["id"] = max(max_widths["id"], font.measure(d["id"]))
-        # max_widths["condicion"] = max(max_widths["condicion"], font.measure(d["condicion"]))
-        # max_widths["estado"] = max(max_widths["estado"], font.measure(estado_inicial))
-
-    # Aplicar ancho calculado y centrar texto
-    # for col in columnas:
-    #     tabla.column(col, width=max_widths[col] + 20, anchor="center")  # +20 para padding
+    # for d in datos:
+    #     estado_inicial = "TRUE" if nombre_hoja in condiciones_dict and d["id"] in condiciones_dict[nombre_hoja] else "FALSE"
+    #     tabla.insert("", "end", values=(d["id"], d["condicion"], estado_inicial))
 
     # Alternar estado con doble clic
-    def toggle_estado(event):
-        item_id = tabla.focus()
-        if not item_id:
-            return
-        valores = tabla.item(item_id, "values")
-        cond_id, cond_text, estado = valores
+    # def toggle_estado(event):
+    #     item_id = tabla.focus()
+    #     if not item_id:
+    #         return
+    #     valores = tabla.item(item_id, "values")
+    #     cond_id, cond_text, estado = valores
 
-        nuevo_estado = "TRUE" if estado == "FALSE" else "FALSE"
-        tabla.item(item_id, values=(cond_id, cond_text, nuevo_estado))
+    #     nuevo_estado = "TRUE" if estado == "FALSE" else "FALSE"
+    #     tabla.item(item_id, values=(cond_id, cond_text, nuevo_estado))
 
-        # Actualizar diccionario global
-        if nuevo_estado == "TRUE":
-            condiciones_dict.setdefault(nombre_hoja, [])
-            if cond_id not in condiciones_dict[nombre_hoja]:
-                condiciones_dict[nombre_hoja].append(cond_id)
-        else:
-            if nombre_hoja in condiciones_dict and cond_id in condiciones_dict[nombre_hoja]:
-                condiciones_dict[nombre_hoja].remove(cond_id)
+    #     # Actualizar diccionario global
+    #     if nuevo_estado == "TRUE":
+    #         condiciones_dict.setdefault(nombre_hoja, [])
+    #         if cond_id not in condiciones_dict[nombre_hoja]:
+    #             condiciones_dict[nombre_hoja].append(cond_id)
+    #     else:
+    #         if nombre_hoja in condiciones_dict and cond_id in condiciones_dict[nombre_hoja]:
+    #             condiciones_dict[nombre_hoja].remove(cond_id)
 
-        print("Diccionario actualizado:", condiciones_dict)
+    #     print("Diccionario actualizado:", condiciones_dict)
 
-    tabla.bind("<Double-1>", toggle_estado)
+    # Event
+    # tabla.bind("<Double-1>", toggle_estado)
 
     # Aquí defines qué hacer al abrir cada hoja
     print(f"Abrir hoja: {nombre_hoja}")
@@ -624,6 +650,13 @@ def abrir_observaciones():
     # Entry
     entry_control = tk.Entry(frame_control, width=15)
     entry_control.grid(row=0, column=1, padx=5, pady=5)
+
+    # ==========================================
+    # FRAME: Especificaciones
+    # ==========================================
+
+    # Crear botones de hojas de Especificaciones
+    botones_documentos(ventana)
 
     # ==========================================
     # FRAME: Tablas pública y privada
@@ -670,16 +703,6 @@ def abrir_observaciones():
         tabla.column("archivo", width=250)
         tabla.column("size", width=50)
 
-        # tabla.heading("archivo", text="Archivo")
-        # tabla.heading("extension", text="Extensión")
-        # tabla.heading("estatus", text="Estatus")
-        # tabla.heading("acciones", text="Acciones")
-
-        # tabla.column("archivo", width=150)
-        # tabla.column("extension", width=80)
-        # tabla.column("estatus", width=100)
-        # tabla.column("acciones", width=120)
-
         tabla.pack(fill="both", expand=True, padx=5, pady=5)
 
     # ==========================================
@@ -723,9 +746,6 @@ def abrir_observaciones():
 
     # Tabla privada
     tabla_privada.bind("<Double-1>", lambda event: on_double_click_row(event, archivos_privados_dict))
-
-    # Crear botones de hojas de Especificaciones
-    # botones_documentos(ventana)
 
 
 # =====================================
