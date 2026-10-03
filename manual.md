@@ -118,3 +118,11 @@ python app.py
 
 # extensiones VSC
     - python
+
+# _______________________________________________________________________
+# INSTALAR PDF PARA GENERACION DE REPORTES
+# _______________________________________________________________________
+python -m pip install fpdf2
+
+# reportlab soporta Unicode
+python -m pip install reportlab
