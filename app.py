@@ -6,6 +6,7 @@ from google.oauth2.credentials import Credentials # ✅ necesario para manejar c
 from google_auth_oauthlib.flow import InstalledAppFlow # ✅ necesario para iniciar sesión en Google
 from google.auth.transport.requests import Request # ✅ refrescar token
 from googleapiclient.discovery import build # ✅ conectar con Google Drive
+from googleapiclient.http import MediaFileUpload
 
 import base64
 from email.mime.text import MIMEText
@@ -18,6 +19,15 @@ from reportlab.lib.pagesizes import LETTER
 from reportlab.pdfgen import canvas
 # from fpdf import FPDF
 
+# ############################################################################################################################
+# ############################################################################################################################
+# ############################################################################################################################
+# ############################################################################################################################
+# ############################################################################################################################
+
+# Variable global con el nombre del archivo
+NAME_ESPECIFICACIONES = "Especificaciones"
+
 # Variables globales
 service_drive = None
 service_gmail = None
@@ -29,6 +39,12 @@ dicc_especificaciones = {}
 
 id_carpeta_publica = None
 id_carpeta_privada = None
+
+# ############################################################################################################################
+# ############################################################################################################################
+# ############################################################################################################################
+# ############################################################################################################################
+# ############################################################################################################################
 
 def init_google_services():
     global service_drive, service_gmail, service_sheets
@@ -89,11 +105,11 @@ def create_folder(folder_name):
     return folder['id']
 # __________________________________________________________________________________
 
-def add_permission(folder_id, email):
-    """Agrega permiso de escritura a un correo"""
+def add_permission(folder_id, email, role="reader"):
+    """Agrega un permiso a un correo."""
     permission = {
         'type': 'user',
-        'role': 'writer',
+        'role': role,
         'emailAddress': email
     }
     try:
@@ -136,9 +152,9 @@ def generar_carpetas(entry_control, entry_correo):
     private_id = create_folder(f"{numero_control}_private")
 
     # Establecer permisos y notificar
-    add_permission(public_id, correo_institucional)
+    add_permission(public_id, correo_institucional, "writer")
     if correo_personal:
-        add_permission(public_id, correo_personal)
+        add_permission(public_id, correo_personal, "writer")
     
     # Mensaje exitoso
     messagebox.showinfo("Éxito", f"Carpetas creadas:\nPública ID: {public_id}\nPrivada ID: {private_id}")
@@ -359,13 +375,33 @@ def reset_tabla(nombre_carpeta, tabla, tipo="publica"):
         else:
             dicc_archivos_privados[nombre] = file_id
 
-    print(f"📦 Diccionario Archivos Publicos Lleno: {dicc_archivos_publicos}")
-    print(f"📦 Diccionario Archivos Privados Lleno: {dicc_archivos_privados}")
+    # print(f"📦 Diccionario Archivos Publicos Lleno: {dicc_archivos_publicos}")
+    # print(f"📦 Diccionario Archivos Privados Lleno: {dicc_archivos_privados}")
+# __________________________________________________________________________________
+
+def find_id_especificaciones():
+    # Buscar archivo Especificaciones
+    query = f"name='{NAME_ESPECIFICACIONES}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false"
+    results = service_drive.files().list(q=query, fields="files(id, name)").execute()
+    files = results.get("files", [])
+
+    if not files:
+        raise FileNotFoundError(f"No se encontró el archivo {NAME_ESPECIFICACIONES}")
+
+    return files[0]["id"]
 # __________________________________________________________________________________
 
 def listar_archivos(entry_control, tabla_publica, tabla_privada):
     global dicc_especificaciones
     dicc_especificaciones = {}
+
+    # get sheets name
+    hojas = get_sheet_names(find_id_especificaciones())
+
+    # add sheets name to dictionary
+    dicc_especificaciones = {hoja: [] for hoja in hojas}
+
+    # print dictionary
     print(f"🗑️ Diccionario Especificaciones reiniciado: {dicc_especificaciones}")
 
     # Validar numero de control
@@ -387,66 +423,10 @@ def validate_control(entry_control):
     return numero_control 
 # __________________________________________________________________________________
 
-root = tk.Tk()
-root.title("Gestión de Expedientes")
-root.geometry("350x250")
-
-# =====================================
-# VENTANA CARPETA DIGITAL
-# =====================================
-
-def abrir_carpeta_digital():
-    ventana = tk.Toplevel(root)
-    ventana.title("Carpeta Digital")
-    ventana.geometry("350x200")
-
-    # ==========================================
-    # FRAME: Control and Email
-    # ==========================================
-
-    # frame
-    frame_control = tk.Frame(ventana)
-    frame_control.pack(fill="x", expand=True, padx=10, pady=10)
-
-    # numero de control
-    tk.Label(frame_control, text="Número de control *").grid(row=0, column=0, padx=5, pady=5)
-    entry_control = tk.Entry(frame_control, width=30)
-    entry_control.grid(row=0, column=1, padx=5, pady=5)
-
-    # correo personal (opcional)
-    tk.Label(frame_control, text="Correo personal").grid(row=1, column=0, padx=5, pady=5)
-    entry_correo = tk.Entry(frame_control, width=30)
-    entry_correo.grid(row=1, column=1, padx=5, pady=5)
-
-    # ==========================================
-    # FRAME: Buttons Acciones
-    # ==========================================
-
-    # frame
-    frame_buttons = tk.Frame(ventana)
-    frame_buttons.pack(anchor="center", padx=10, pady=10)
-
-    # Generar Carpeta Digital
-    tk.Button(
-        frame_buttons,
-        text="Generar Carpeta Digital",
-        command=lambda: generar_carpetas(entry_control, entry_correo)
-    ).grid(row=0, column=0, padx=5, pady=5)
-
-    # Notificar Carpeta Digital
-    tk.Button(
-        frame_buttons,
-        text="Notificar Al Estudiante",
-        command=lambda: notificar_carpetas(entry_control, entry_correo)
-    ).grid(row=0, column=1, padx=5, pady=5)
-
-# __________________________________________________________________________________
-
 def get_sheet_names(spreadsheet_id):
     """Devuelve lista de nombres de hojas de un spreadsheet"""
     metadata = service_sheets.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
     return [sheet["properties"]["title"] for sheet in metadata["sheets"]]
-
 # __________________________________________________________________________________
 
 def botones_documentos(ventana, entry_control):
@@ -456,20 +436,20 @@ def botones_documentos(ventana, entry_control):
     frame_documentos.pack(fill="x", expand=True, padx=10, pady=10)
 
     # Buscar archivo Especificaciones
-    query = "name='Especificaciones' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false"
-    results = service_drive.files().list(q=query, fields="files(id, name)").execute()
-    files = results.get("files", [])
+    # query = "name='Especificaciones' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false"
+    # results = service_drive.files().list(q=query, fields="files(id, name)").execute()
+    # files = results.get("files", [])
 
     # Mostrar mensaje (si no existen especificaciones)
-    if not files:
-        tk.Label(frame_documentos, text="No se encontró la hoja de calculo Especificaciones").pack(pady=5, padx=5)
-        return
+    # if not files:
+    #     tk.Label(frame_documentos, text="No se encontró la hoja de calculo Especificaciones").pack(pady=5, padx=5)
+    #     return
 
     # Obtener ID del archivo Especificaciones
-    spreadsheet_id = files[0]["id"]
+    # spreadsheet_id = files[0]["id"]
 
     # Obtener nombres de hojas
-    hojas = get_sheet_names(spreadsheet_id)
+    hojas = get_sheet_names(find_id_especificaciones())
 
     # Frame: contenedor botones
     frame_botones = tk.Frame(frame_documentos)
@@ -480,9 +460,8 @@ def botones_documentos(ventana, entry_control):
         tk.Button(
             frame_botones,
             text=hoja,
-            command=lambda h=hoja: abrir_especificaciones(entry_control, h, spreadsheet_id)
+            command=lambda h=hoja: abrir_especificaciones(entry_control, h, find_id_especificaciones())
         ).grid(row=0, column=columna, padx=5, pady=5)
-
 # __________________________________________________________________________________
 
 def leer_condiciones(nombre_hoja, spreadsheet_id):
@@ -641,13 +620,54 @@ def abrir_especificaciones(entry_control, nombre_hoja, spreadsheet_id):
 
     # Aquí defines qué hacer al abrir cada hoja
     print(f"Abrir hoja: {nombre_hoja}")
+# __________________________________________________________________________________
 
-def generar_reporte(diccionario, nombre_archivo="reporte.pdf", vista_previa=False):
+def subir_a_drive(ruta_archivo, id_carpeta_publica):
+    file_metadata = {
+        "name": os.path.basename(ruta_archivo),
+        "parents": [id_carpeta_publica]
+    }
+    media = MediaFileUpload(ruta_archivo, mimetype="application/pdf")
+    archivo = service_drive.files().create(
+        body=file_metadata,
+        media_body=media,
+        fields="id"
+    ).execute()
+
+    # retornar el id del archivo subido a Drive
+    return archivo["id"]
+# __________________________________________________________________________________
+
+def generar_reporte(diccionario, entry_control, vista_previa=False):
+    # Validar control
+    numero_control = validate_control(entry_control)
+    if not numero_control:
+        return
+
+    # fecha actual
+    # fecha_actual = datetime.now().strftime("%d-%m-%Y_%H-%M-%S") # 24 HORAS
+    # fecha_actual = datetime.now().strftime("%d-%m-%Y_%I-%M-%S_%p") # AM o PM
+    fecha_actual = datetime.now().strftime("%d %B %Y_%I-%M-%S_%p")
+
+    # fecha_actual = datetime.now().strftime("%d/%m/%Y %H:%M:%S") 
+
+    # nombre archivo
+    nombre_archivo = f"Observaciones_{numero_control}_{fecha_actual}"
+
+    # Si es vista previa, guardar en el Escritorio
+    # if vista_previa:
+    #     escritorio = os.path.join(os.path.expanduser("~"), "Desktop")
+    #     ruta_archivo = os.path.join(escritorio, "preview.pdf")
+    # else:
+    #     ruta_archivo = nombre_archivo  # se guarda en la ruta del proyecto o la que indiques
+    # id_carpeta_privada 
+
+
     c = canvas.Canvas(nombre_archivo, pagesize=LETTER)
     width, height = LETTER
 
     # Encabezado
-    fecha_actual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    # fecha_actual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     c.setFont("Helvetica", 12)
     c.drawString(50, height - 50, "Observaciones de documentos enviados")
     c.drawString(50, height - 70, f"Fecha de revisión: {fecha_actual}")
@@ -681,46 +701,91 @@ def generar_reporte(diccionario, nombre_archivo="reporte.pdf", vista_previa=Fals
 
     # Abrir vista previa si corresponde
     if vista_previa:
-        os.startfile(nombre_archivo)  # en Windows abre el PDF con el visor predeterminado
+        # Guardar en escritorio y abrir
+        escritorio = os.path.join(os.path.expanduser("~"), "Desktop")
+        ruta_archivo = os.path.join(escritorio, f"{nombre_archivo}.pdf")
+        os.replace(nombre_archivo, ruta_archivo)  # moverlo al escritorio
 
-    
+        # abrir PDF en visor predeterminado
+        os.startfile(ruta_archivo)
+    else:
+        # Confirmación antes de subir
+        confirmar = messagebox.askyesno(
+            "Confirmación",
+            f"¿Desea generar el PDF con las observaciones en la carpeta pública del estudiante {numero_control}?"
+        )
+        if confirmar:
+            # Subir observaciones a carpeta publica
+            archivo_id = subir_a_drive(nombre_archivo, id_carpeta_publica)
 
-# def generar_reporte(diccionario, nombre_archivo="reporte.pdf", vista_previa=False):
-#     pdf = FPDF()
-#     pdf.add_page()
-#     pdf.set_font("Arial", size=12)
+            # dar permiso de lector a observaciones
+            correo_institucional = f"{numero_control}@cuautla.tecnm.mx"
+            add_permission(archivo_id, correo_institucional)
 
-#     # Encabezado
-#     fecha_actual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-#     pdf.multi_cell(0, 10, f"Observaciones de documentos enviados\nFecha de revisión: {fecha_actual}\n")
-
-#     # Recorrer todas las hojas (documentos)
-#     for hoja, ids in diccionario.items():
-#         pdf.set_font("Arial", "B", 12)
-#         pdf.cell(0, 10, hoja, ln=True)
-
-#         if not ids:  # sin observaciones
-#             pdf.set_font("Arial", size=12)
-#             pdf.cell(0, 10, "Documento Correcto [OK]", ln=True)
-#         else:
-#             pdf.set_font("Arial", size=12)
-#             for i, cond_id in enumerate(ids, start=1):
-#                 # Aquí deberías mapear cond_id → mensaje completo desde tu tabla de condiciones
-#                 mensaje = dicc_especificaciones.get(cond_id, "Observación no encontrada")
-#                 pdf.multi_cell(0, 10, f"{i}. {mensaje}")
-
-#         pdf.ln(5)
-
-#     # Mensaje final
-#     pdf.multi_cell(0, 10, "Favor de corregir los documentos con observaciones y reemplazarlos por los existentes. Mantener los documentos correctos en la carpeta digital.")
-
-#     # Guardar archivo
-#     pdf.output(nombre_archivo)
-
-#     # Abrir vista previa si corresponde
-#     if vista_previa:
-#         os.startfile(nombre_archivo)  # en Windows abre el PDF con el visor predeterminado
+        else:
+            messagebox.showinfo("Cancelado", "El reporte no fue generado en la carpeta pública.")
+        # subir_a_drive(nombre_archivo, id_carpeta_publica)
 # __________________________________________________________________________________
+
+# ############################################################################################################################
+# ############################################################################################################################
+# ############################################################################################################################
+# ############################################################################################################################
+# ############################################################################################################################
+
+root = tk.Tk()
+root.title("Gestión de Expedientes")
+root.geometry("350x250")
+
+# =====================================
+# VENTANA CARPETA DIGITAL
+# =====================================
+
+def abrir_carpeta_digital():
+    ventana = tk.Toplevel(root)
+    ventana.title("Carpeta Digital")
+    ventana.geometry("350x200")
+
+    # ==========================================
+    # FRAME: Control and Email
+    # ==========================================
+
+    # frame
+    frame_control = tk.Frame(ventana)
+    frame_control.pack(fill="x", expand=True, padx=10, pady=10)
+
+    # numero de control
+    tk.Label(frame_control, text="Número de control *").grid(row=0, column=0, padx=5, pady=5)
+    entry_control = tk.Entry(frame_control, width=30)
+    entry_control.grid(row=0, column=1, padx=5, pady=5)
+
+    # correo personal (opcional)
+    tk.Label(frame_control, text="Correo personal").grid(row=1, column=0, padx=5, pady=5)
+    entry_correo = tk.Entry(frame_control, width=30)
+    entry_correo.grid(row=1, column=1, padx=5, pady=5)
+
+    # ==========================================
+    # FRAME: Buttons Acciones
+    # ==========================================
+
+    # frame
+    frame_buttons = tk.Frame(ventana)
+    frame_buttons.pack(anchor="center", padx=10, pady=10)
+
+    # Generar Carpeta Digital
+    tk.Button(
+        frame_buttons,
+        text="Generar Carpeta Digital",
+        command=lambda: generar_carpetas(entry_control, entry_correo)
+    ).grid(row=0, column=0, padx=5, pady=5)
+
+    # Notificar Carpeta Digital
+    tk.Button(
+        frame_buttons,
+        text="Notificar Al Estudiante",
+        command=lambda: notificar_carpetas(entry_control, entry_correo)
+    ).grid(row=0, column=1, padx=5, pady=5)
+
 # =====================================
 # VENTANA OBSERVACIONES
 # =====================================
@@ -737,44 +802,50 @@ def abrir_observaciones():
     frame_encabezado.pack(fill="x", expand=True, padx=10, pady=10)
 
     # ==========================================
-    # FRAMELABEL: Estudiante
+    # LABEL FRAME: Estudiante
     # ==========================================
-    frame_control = tk.LabelFrame(frame_encabezado, text="Estudiante")
-    frame_control.pack(side="left", fill="x", anchor="center", expand=True, padx=5, pady=5)
+    labelframe_estudiante = tk.LabelFrame(frame_encabezado, text="Estudiante")
+    labelframe_estudiante.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+
+    # ==========================================
+    # FRAME: Estudiante
+    # ==========================================
+    frame_estudiante = tk.Frame(labelframe_estudiante)
+    frame_estudiante.pack(fill="both", anchor="center", expand=True, padx=5, pady=5)
+
+    # Configurar columnas para que se expandan
+    frame_estudiante.columnconfigure(0, weight=1)
+    frame_estudiante.columnconfigure(1, weight=1)
 
     # Label
-    tk.Label(frame_control, text="Número de control:").grid(row=0, column=0, padx=5, pady=5)
+    tk.Label(frame_estudiante, text="Número de control:").grid(row=0, column=0, padx=5, pady=5, sticky="ew")
 
     # Entry
-    entry_control = tk.Entry(frame_control, width=15)
-    entry_control.grid(row=0, column=1, padx=5, pady=5)
+    entry_control = tk.Entry(frame_estudiante, width=15)
+    entry_control.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
     # ==========================================
-    # FRAMELABEL: Reporte
+    # LABEL FRAME: Reporte
     # ==========================================
-    frame_reporte = tk.LabelFrame(frame_encabezado, text="Reporte")
-    frame_reporte.pack(side="right", fill="x", anchor="center", expand=True, padx=5, pady=5)
+    frame_reporte = tk.LabelFrame(frame_encabezado, text="Observaciones")
+    frame_reporte.pack(side="right", fill="both", expand=True, padx=5, pady=5)
+    
+    # Configurar columnas para que se expandan
+    frame_reporte.columnconfigure(0, weight=1)
+    frame_reporte.columnconfigure(1, weight=1)
 
     # Button: preview
     tk.Button(
         frame_reporte, 
         text="Vista Previa",
-        command=lambda: generar_reporte(dicc_especificaciones, "preview.pdf", True)
-    ).grid(row=0, column=0, padx=5, pady=5)
+        command=lambda: generar_reporte(dicc_especificaciones, entry_control, True)
+    ).grid(row=0, column=0, padx=5, pady=5, sticky="ew")
 
     tk.Button(
         frame_reporte,
-        text="Generar Reporte",
-        command=lambda: generar_reporte(dicc_especificaciones, "reporte_final.pdf")
-    ).grid(row=0, column=1, padx=5, pady=5)
-
-    # ==========================================
-    # FRAME: Reporte
-    # ==========================================
-
-    # ==========================================
-    # FRAME: Especificaciones
-    # ==========================================
+        text="Enviar Observaciones",
+        command=lambda: generar_reporte(dicc_especificaciones, entry_control)
+    ).grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
     # Crear botones de hojas de Especificaciones
     botones_documentos(ventana, entry_control)
@@ -876,7 +947,6 @@ def abrir_observaciones():
     # Tabla privada
     tabla_privada.bind("<Double-1>", lambda event: on_double_click_row(event, dicc_archivos_privados))
 
-
 # =====================================
 # VENTANA PRINCIPAL / MENÚ
 # =====================================
@@ -905,3 +975,9 @@ tk.Button(
 init_google_services()
 
 root.mainloop()
+
+# ############################################################################################################################
+# ############################################################################################################################
+# ############################################################################################################################
+# ############################################################################################################################
+# ############################################################################################################################

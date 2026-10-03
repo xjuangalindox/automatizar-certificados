@@ -118,3 +118,18 @@ def copiar_a_privada(entry_control, tabla_publica, tabla_privada):
     # Refrescar tabla privada
     reset_tabla(f"{numero_control}_private", tabla_privada, "privada")
     # listar_archivos(entry_control, tabla_publica, tabla_privada)
+
+# ##############################################################################################################
+
+        # Button: preview
+    tk.Button(
+        frame_reporte, 
+        text="Vista Previa",
+        command=lambda: generar_reporte(dicc_especificaciones, entry_control, True)
+    ).grid(row=0, column=0, padx=5, pady=5, sticky="ew")
+
+    tk.Button(
+        frame_reporte,
+        text="Generar Reporte",
+        command=lambda: generar_reporte(dicc_especificaciones, entry_control)
+    ).grid(row=0, column=1, padx=5, pady=5, sticky="ew")
