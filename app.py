@@ -17,6 +17,8 @@ import webbrowser
 from datetime import datetime
 from reportlab.lib.pagesizes import LETTER
 from reportlab.pdfgen import canvas
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import Paragraph
 # from fpdf import FPDF
 
 # ############################################################################################################################
@@ -638,6 +640,48 @@ def subir_a_drive(ruta_archivo, id_carpeta_publica):
     return archivo["id"]
 # __________________________________________________________________________________
 
+def get_active_rows_document(spreadsheet_id, name_sheet):
+    # Obtener rows del documento
+    result = service_sheets.spreadsheets().values().get(
+        spreadsheetId=spreadsheet_id,
+        range=name_sheet
+    ).execute()
+
+    # Validar filas (ID, Condicion, Especificacion, Activo)
+    values = result.get("values", [])
+    if not values:
+        return []
+
+    # Encabezados
+    encabezados = values[0]
+
+    # Índices de las columnas que nos interesan
+    try:
+        indice_id = encabezados.index("ID")
+        indice_condicion = encabezados.index("Condicion")
+        indice_observacion = encabezados.index("Observacion")
+        indice_activo = encabezados.index("Activo")
+    except ValueError:
+        return []
+
+    filas = []
+
+    # Recorrer filas de datos
+    for row in values[1:]:
+        # Validar que tenga suficientes columnas
+        if len(row) <= max(indice_id, indice_condicion, indice_observacion, indice_activo):
+            continue
+
+        # Solo incluir si Activo == "TRUE"
+        if row[indice_activo].strip().upper() == "TRUE":
+            filas.append({
+                "id": row[indice_id],
+                "condicion": row[indice_condicion],
+                "observacion": row[indice_observacion]
+            })
+
+    return filas
+
 def generar_reporte(diccionario, entry_control, vista_previa=False):
     # Validar control
     numero_control = validate_control(entry_control)
@@ -647,54 +691,112 @@ def generar_reporte(diccionario, entry_control, vista_previa=False):
     # fecha actual
     # fecha_actual = datetime.now().strftime("%d-%m-%Y_%H-%M-%S") # 24 HORAS
     # fecha_actual = datetime.now().strftime("%d-%m-%Y_%I-%M-%S_%p") # AM o PM
-    fecha_actual = datetime.now().strftime("%d %B %Y_%I-%M-%S_%p")
+    fecha_actual_os = datetime.now().strftime("%d %B %Y_%I %M %S %p") # 12 horas, mes, AM o PM
+    fecha_actual_pdf = datetime.now().strftime("%d %B %Y %I:%M:%S %p") # 12 horas, mes, AM o PM
 
     # fecha_actual = datetime.now().strftime("%d/%m/%Y %H:%M:%S") 
 
     # nombre archivo
-    nombre_archivo = f"Observaciones_{numero_control}_{fecha_actual}"
-
-    # Si es vista previa, guardar en el Escritorio
-    # if vista_previa:
-    #     escritorio = os.path.join(os.path.expanduser("~"), "Desktop")
-    #     ruta_archivo = os.path.join(escritorio, "preview.pdf")
-    # else:
-    #     ruta_archivo = nombre_archivo  # se guarda en la ruta del proyecto o la que indiques
-    # id_carpeta_privada 
-
+    nombre_archivo = f"{numero_control}_{fecha_actual_os}"
 
     c = canvas.Canvas(nombre_archivo, pagesize=LETTER)
     width, height = LETTER
 
     # Encabezado
     # fecha_actual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    # c.setFont("Helvetica", 12)
+    # c.drawString(50, height - 50, "OBSERVACIONES DE DOCUMENTOS")
+    # c.drawString(50, height - 70, f"Fecha de revisión: {fecha_actual}")
+
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(50, height - 50, f"OBSERVACIONES DE DOCUMENTOS - {numero_control}")
     c.setFont("Helvetica", 12)
-    c.drawString(50, height - 50, "Observaciones de documentos enviados")
-    c.drawString(50, height - 70, f"Fecha de revisión: {fecha_actual}")
+    c.drawString(50, height - 70, f"Fecha de revisión: {fecha_actual_pdf}")
 
     y = height - 100
 
-    for hoja, ids in diccionario.items():
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(50, y, hoja)
-        y -= 20
+# _____________________________________
+    # obtener id especificaciones
+    spreadsheet_id = find_id_especificaciones()
 
-        if not ids:
-            c.setFont("Helvetica", 12)
-            c.drawString(70, y, "Documento Correcto ✅")
-            y -= 20
+    # por cada documento en diccionario especificaciones
+    for nombre_hoja, ids_dicc in dicc_especificaciones.items():
+        # Traer rows activos de esa hoja
+        rows = get_active_rows_document(spreadsheet_id, nombre_hoja)
+
+        # Filtrar solo los que estén en ids_dicc
+        filtrados = [row for row in rows if row["id"] in ids_dicc]
+
+        # Encabezado con nombre del documento
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(50, y, nombre_hoja) # nombre documento (ejemplo: CURP)
+        y -= 5
+
+        # formato para observaciones
+        styles = getSampleStyleSheet()
+        style_normal = styles["Normal"]
+
+        if not filtrados:
+            # texto
+            texto = "Documento Correcto [OK]"
+
+            # parrafo y posicion
+            p = Paragraph(texto, style_normal)
+            availWidth, availHeight = p.wrap(width - 120, y)
+
+            # validar si necesita otra pagina y resetear posicion (altura)
+            if (y - availHeight < 50):
+                c.showPage()
+                y = height - 50
+
+            # dibujar párrafo y salto de linea
+            p.drawOn(c, 70, y - availHeight)
+            y -= availHeight + 10
+
+            y -= 20 # 👈 más espacio antes del siguiente documento
+
         else:
-            c.setFont("Helvetica", 12)
-            for i, cond_id in enumerate(ids, start=1):
-                # Aquí deberías mapear cond_id → mensaje completo desde tu tabla de condiciones
-                mensaje = dicc_especificaciones.get(cond_id, "Observación no encontrada")
-                c.drawString(70, y, f"{i}. {mensaje}")
-                y -= 20
+            for i, row in enumerate(filtrados, start=1):
+                # texto
+                observacion = row.get("observacion", "Observación no encontrada")
+                texto = f"{i}. {observacion}"
+
+                # parrafo y posicion
+                p = Paragraph(texto, style_normal)
+                availWidth, availHeight = p.wrap(width - 120, y)
+
+                # validar si necesita otra pagina y resetear posicion (altura)
+                if (y - availHeight < 50):
+                    c.showPage()
+                    y = height - 50
+
+                # dibujar párrafo y salto de linea
+                p.drawOn(c, 70, y - availHeight)
+                y -= availHeight + 10
+
+            y -= 20 # 👈 más espacio antes del siguiente documento
+# _____________________________________
+
+    # texto
+    texto = "Favor de corregir y reemplazar los documentos con observaciones, los documentos correctos se deben mantener en la carpeta digital."
+
+    # parrafo y posicion
+    p = Paragraph(texto, style_normal)
+    availWidth, availHeight = p.wrap(width - 120, y)
+
+    # validar si necesita otra pagina y resetear posicion (altura)
+    if (y - availHeight < 50):
+        c.showPage()
+        y = height - 50
+
+    # dibujar párrafo y salto de linea
+    p.drawOn(c, 70, y - availHeight)
+    y -= availHeight + 10
 
     # Mensaje final
-    c.setFont("Helvetica", 12)
-    c.drawString(50, y - 20, "Favor de corregir los documentos con observaciones y reemplazarlos por los existentes.")
-    c.drawString(50, y - 40, "Mantener los documentos correctos en la carpeta digital.")
+    # c.setFont("Helvetica", 12)
+    # c.drawString(50, y - 20, "Favor de corregir y reemplazar los documentos con observaciones,")
+    # c.drawString(50, y - 40, "los documentos correctos se deben mantener en la carpeta digital.")
 
     # Guardar archivo
     c.save()
@@ -708,12 +810,14 @@ def generar_reporte(diccionario, entry_control, vista_previa=False):
 
         # abrir PDF en visor predeterminado
         os.startfile(ruta_archivo)
+
     else:
         # Confirmación antes de subir
         confirmar = messagebox.askyesno(
             "Confirmación",
             f"¿Desea generar el PDF con las observaciones en la carpeta pública del estudiante {numero_control}?"
         )
+
         if confirmar:
             # Subir observaciones a carpeta publica
             archivo_id = subir_a_drive(nombre_archivo, id_carpeta_publica)
@@ -722,9 +826,12 @@ def generar_reporte(diccionario, entry_control, vista_previa=False):
             correo_institucional = f"{numero_control}@cuautla.tecnm.mx"
             add_permission(archivo_id, correo_institucional)
 
+            # message successful
+            messagebox.showinfo("Exito", f"Las observaciones se enviaron correctamente al estudiante {numero_control}")
+
         else:
-            messagebox.showinfo("Cancelado", "El reporte no fue generado en la carpeta pública.")
-        # subir_a_drive(nombre_archivo, id_carpeta_publica)
+            # message canceled
+            messagebox.showinfo("Cancelado", "El envío de observaciones fue cancelado.")
 # __________________________________________________________________________________
 
 # ############################################################################################################################
